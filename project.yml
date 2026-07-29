@@ -6,6 +6,11 @@ options:
   deploymentTarget:
     iOS: "15.0"
   createIntermediateGroups: true
+  # Sin esto, XcodeGen escribe el proyecto en el formato nuevo (objectVersion 77)
+  # y el Xcode del runner no sabe abrirlo: "future Xcode project file format".
+  # Fijándolo al formato clásico, compila con cualquier Xcode reciente.
+  objectVersion: 56
+  compatibilityVersion: "Xcode 14.0"
 
 targets:
   YTLimpio:

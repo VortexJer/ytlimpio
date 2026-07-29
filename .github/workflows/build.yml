@@ -17,6 +17,11 @@ jobs:
       - name: Instalar XcodeGen
         run: brew install xcodegen
 
+      - name: Versiones (para cuando algo falle)
+        run: |
+          xcodegen --version
+          xcodebuild -version
+
       - name: Generar el proyecto de Xcode
         run: xcodegen generate
 
