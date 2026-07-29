@@ -1,0 +1,33 @@
+# Receta para XcodeGen: genera el .xcodeproj en el runner de macOS, así no hay
+# que versionar un fichero de proyecto de Xcode (que es ilegible y da conflictos).
+name: YTLimpio
+options:
+  bundleIdPrefix: com.ytlimpio
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+
+targets:
+  YTLimpio:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+      - path: ytlimpio.user.js
+        buildPhase: resources
+    info:
+      path: App/Info.plist
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ytlimpio.app
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_VERSION: "5.0"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Sin firma: el .ipa sale sin firmar y lo firma Sideloadly con tu
+        # Apple ID ya en tu PC. Es lo que permite compilar sin cuenta de pago.
+        CODE_SIGN_IDENTITY: ""
+        CODE_SIGNING_REQUIRED: "NO"
+        CODE_SIGNING_ALLOWED: "NO"
+        CODE_SIGN_STYLE: Manual
