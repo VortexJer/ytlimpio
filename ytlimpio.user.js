@@ -148,6 +148,64 @@
   }
   ponerCSS();
 
+  // Los nombres de los elementos de YouTube cambian cada dos por tres y no son
+  // los mismos en la web móvil que en la de escritorio, así que fiarse de ellos
+  // es perder. Lo que no cambia es que un Short es un enlace a /shorts/algo.
+  //
+  // Se parte de cada enlace y se sube buscando la tarjeta que lo envuelve, con
+  // una regla que evita el desastre de antes: en cuanto un ancestro contiene
+  // también vídeos normales, se para. Así es imposible llevarse por delante
+  // una sección entera del inicio.
+  function quitarShorts() {
+    if (!QUITAR_SHORTS) return;
+
+    let enlaces;
+    try { enlaces = document.querySelectorAll('a[href*="/shorts/"]'); }
+    catch (_) { return; }
+
+    for (const enlace of enlaces) {
+      if (enlace.dataset.ytl === '1') continue;
+      enlace.dataset.ytl = '1';
+
+      // Dos frenos, y los dos hacen falta:
+      //  - Parar si el ancestro tiene vídeos normales dentro (mezclaría cosas).
+      //  - No subir más de 3 niveles pase lo que pase. Sin este tope, en una
+      //    sección que aún no ha cargado sus vídeos no habría nada que
+      //    detuviera la subida y volveríamos a ocultar media portada. Las
+      //    estanterías enteras de Shorts las cubre el CSS, que va por nombre.
+      let nodo = enlace, elegido = enlace;
+      for (let i = 0; i < 3 && nodo.parentElement; i++) {
+        const padre = nodo.parentElement;
+        if (padre === document.body || padre === document.documentElement) break;
+
+        let normales = 0;
+        try { normales = padre.querySelectorAll('a[href*="/watch?v="]').length; }
+        catch (_) {}
+        if (normales > 0) break;
+
+        nodo = padre;
+        elegido = padre;
+      }
+
+      try { elegido.style.setProperty('display', 'none', 'important'); } catch (_) {}
+    }
+
+    // El botón de Shorts de la barra de abajo (móvil) y del menú lateral.
+    let botones;
+    try {
+      botones = document.querySelectorAll(
+        'a[href="/shorts"], a[href^="/shorts?"], a[title="Shorts"]');
+    } catch (_) { return; }
+    for (const b of botones) {
+      if (b.dataset.ytl === '1') continue;
+      b.dataset.ytl = '1';
+      const caja = b.closest(
+        'ytm-pivot-bar-item-renderer, ytd-guide-entry-renderer, ' +
+        'ytd-mini-guide-entry-renderer, [role="tab"], li') || b;
+      try { caja.style.setProperty('display', 'none', 'important'); } catch (_) {}
+    }
+  }
+
   // Un Short abierto directamente se convierte en un vídeo normal: mismo
   // contenido, con controles de verdad y sin el carrusel infinito.
   function shortAVideo() {
@@ -271,6 +329,7 @@
   // ── 6. Bucle y navegación ─────────────────────────────────────────────────
   function tick() {
     ponerCSS();       // YouTube reescribe la cabecera al navegar
+    quitarShorts();
     saltarAnuncio();
     quitarAviso();
   }
