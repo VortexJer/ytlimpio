@@ -9,13 +9,20 @@ on:
 jobs:
   ipa:
     # Runner de macOS: gratis y sin límite de minutos en repositorios públicos.
-    runs-on: macos-14
+    # macos-15 porque trae Xcode 16: XcodeGen genera el proyecto en el formato
+    # nuevo (objectVersion 77) y el Xcode de macos-14 no sabe abrirlo.
+    runs-on: macos-15
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Instalar XcodeGen
         run: brew install xcodegen
+
+      - name: Usar el Xcode más nuevo del runner
+        run: |
+          ls /Applications | grep -i "^Xcode" || true
+          sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
 
       - name: Versiones (para cuando algo falle)
         run: |
