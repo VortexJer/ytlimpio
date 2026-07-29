@@ -62,8 +62,11 @@
 
   // Los siguientes llegan por fetch. En móvil el endpoint es el mismo que en
   // escritorio: /youtubei/v1/player y /youtubei/v1/get_watch (navegación SPA).
+  // Solo las respuestas del reproductor. /next (comentarios y relacionados) se
+  // deja en paz: no trae anuncios de vídeo, pesa mucho y reescribirla es
+  // pedir problemas.
   const ENDPOINT =
-    /\/youtubei\/v1\/(player(\?|$)|get_watch(\?|$)|reel\/reel_watch_sequence(\?|$)|reel\/reel_item_watch(\?|$)|next(\?|$))/;
+    /\/youtubei\/v1\/(player(\?|$)|get_watch(\?|$)|reel\/reel_watch_sequence(\?|$)|reel\/reel_item_watch(\?|$))/;
   const fetchNativo = window.fetch;
 
   window.fetch = function fetch(entrada) {
@@ -81,8 +84,15 @@
         try {
           const datos = JSON.parse(texto);
           if (!podar(datos)) return resp;
+          // Cabeceras NUEVAS, no las del original: las suyas dicen que el
+          // cuerpo viene comprimido y con cierta longitud, y este cuerpo ya
+          // está descomprimido y mide otra cosa. Copiarlas tal cual es
+          // sembrar respuestas ilegibles.
+          const cabeceras = new Headers();
+          cabeceras.set('content-type',
+            resp.headers.get('content-type') || 'application/json; charset=utf-8');
           return new Response(JSON.stringify(datos), {
-            status: resp.status, statusText: resp.statusText, headers: resp.headers,
+            status: resp.status, statusText: resp.statusText, headers: cabeceras,
           });
         } catch (_) { return resp; }
       }).catch(() => resp);
@@ -105,10 +115,16 @@
   // selector de una lista separada por comas no se entiende, el navegador tira
   // la regla ENTERA. Mezclarlos habría dejado sin efecto también a los de
   // arriba en cualquier navegador que no soporte :has().
+  //
+  // Aquí SOLO van contenedores de UNA tarjeta. Tenía puesto
+  // ytm-item-section-renderer, que en la web móvil envuelve secciones enteras
+  // del inicio: bastaba un Short dentro para que se llevara por delante media
+  // portada — la pantalla en negro.
   const SHORTS_HAS = [
     'ytd-video-renderer:has(a[href^="/shorts/"])',
     'ytd-rich-item-renderer:has(a[href^="/shorts/"])',
-    'ytm-item-section-renderer:has(a[href^="/shorts/"])',
+    'ytm-video-with-context-renderer:has(a[href^="/shorts/"])',
+    'ytm-rich-item-renderer:has(a[href^="/shorts/"])',
     'ytd-guide-entry-renderer:has(a[title="Shorts"])',
     'ytm-pivot-bar-item-renderer:has([aria-label="Shorts"])',
   ];
