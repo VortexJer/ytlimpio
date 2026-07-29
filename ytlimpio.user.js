@@ -20,6 +20,12 @@
 
   const QUITAR_SHORTS = true;
 
+  // Aviso de "esto está funcionando": sale abajo unos segundos al abrir
+  // YouTube y se va solo. Cuando te canses, ponlo en false.
+  const MOSTRAR_ESTADO = true;
+
+  let podados = 0;   // cuántas claves de anuncio se han quitado
+
   // ── 1. Poda de los datos del reproductor ──────────────────────────────────
   // Las claves de anuncio se borran del JSON antes de que lo consuma el
   // reproductor. Nunca se bloquea la petición: eso deja el player colgado.
@@ -32,7 +38,7 @@
     try {
       if (!Array.isArray(nodo)) {
         for (const k of AD_KEYS) {
-          if (k in nodo) { delete nodo[k]; cambiado = true; }
+          if (k in nodo) { delete nodo[k]; cambiado = true; podados++; }
         }
       }
       for (const k in nodo) {
@@ -213,7 +219,40 @@
     }
   }
 
-  // ── 5. Bucle y navegación ─────────────────────────────────────────────────
+  // ── 5. "¿Está funcionando?" ───────────────────────────────────────────────
+  // Un cartel discreto abajo, unos segundos, con lo que ha hecho. Es la forma
+  // de saber que el script corre de verdad y no que YouTube ese día no tenía
+  // anuncios que poner.
+  function avisoDeEstado() {
+    if (!MOSTRAR_ESTADO) return;
+    if (window.top !== window) return;         // solo en la página principal
+    if (document.getElementById('ytlimpio-aviso')) return;
+
+    const caja = document.createElement('div');
+    caja.id = 'ytlimpio-aviso';
+    caja.textContent = 'YT LIMPIO ACTIVO · anuncios podados: ' + podados +
+                       (QUITAR_SHORTS ? ' · shorts fuera' : '');
+    caja.style.cssText =
+      'position:fixed;left:50%;bottom:26px;transform:translateX(-50%);' +
+      'z-index:2147483647;pointer-events:none;background:#080B0F;color:#00FF88;' +
+      'border:1px solid rgba(0,255,136,.35);border-radius:6px;padding:8px 14px;' +
+      'font:600 12px/1.4 -apple-system,Consolas,monospace;letter-spacing:.06em;' +
+      'opacity:0;transition:opacity .35s ease';
+    document.documentElement.appendChild(caja);
+
+    requestAnimationFrame(() => { caja.style.opacity = '1'; });
+    setTimeout(() => { caja.style.opacity = '0'; }, 4000);
+    setTimeout(() => { try { caja.remove(); } catch (_) {} }, 4600);
+  }
+
+  // Se espera un poco: así el recuento incluye ya la respuesta del reproductor.
+  if (document.readyState === 'complete') {
+    setTimeout(avisoDeEstado, 1800);
+  } else {
+    window.addEventListener('load', () => setTimeout(avisoDeEstado, 1800));
+  }
+
+  // ── 6. Bucle y navegación ─────────────────────────────────────────────────
   function tick() {
     ponerCSS();       // YouTube reescribe la cabecera al navegar
     saltarAnuncio();
