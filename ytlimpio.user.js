@@ -133,6 +133,9 @@
     'ytm-pivot-bar-item-renderer:has([aria-label="Shorts"])',
     'ytm-pivot-bar-item-renderer:has([tab-identifier="FEshorts"])',
     'ytm-pivot-bar-item-renderer:has(a[href$="/shorts"])',
+    // Las de verdad, vistas en la web de móvil: el botón es un div con clase.
+    'ytm-pivot-bar-item-renderer:has(.pivot-shorts)',
+    'ytm-pivot-bar-item-renderer:has(.pivot-bar-item-tab.shorts)',
   ];
 
   const CSS = `
@@ -205,16 +208,20 @@
     try {
       candidatos = document.querySelectorAll(
         'a[href*="shorts" i], [tab-identifier], [data-mobile-tab-identifier], ' +
-        '[aria-label="Shorts"], [title="Shorts"]');
+        '[aria-label="Shorts"], [title="Shorts"], [role="tab"], ' +
+        'ytm-pivot-bar-item-renderer, ytd-guide-entry-renderer, ' +
+        'ytd-mini-guide-entry-renderer');
     } catch (_) { return; }
 
     for (const c of candidatos) {
       if (c.dataset.ytl === '1') continue;
       if (!esDeShorts(c)) continue;
       c.dataset.ytl = '1';
+      // La caja entera, no solo lo que se ha reconocido: si se esconde nada
+      // más el interior, el hueco se queda ocupando su sitio en la barra.
       const caja = c.closest(
         'ytm-pivot-bar-item-renderer, ytd-guide-entry-renderer, ' +
-        'ytd-mini-guide-entry-renderer, [role="tab"], li') || c;
+        'ytd-mini-guide-entry-renderer, li') || c;
       try { caja.style.setProperty('display', 'none', 'important'); } catch (_) {}
     }
   }
@@ -224,17 +231,37 @@
   // (…/watch?v=x&list=shorts) no se lo lleva por delante.
   const RUTA_SHORTS = /^(?:https?:\/\/[^/]*)?\/shorts(?:[/?#]|$)/i;
 
+  // La clase del botón de la barra de abajo. Hay dos variantes según la página
+  // ("pivot-shorts" en el inicio, "shorts" a secas en los resultados de
+  // búsqueda), así que se acepta la palabra suelta o con prefijo.
+  const CLASE_SHORTS = /(^|\s)[a-z-]*shorts(\s|$)/i;
+
   function esDeShorts(el) {
     try {
       if (!el.getAttribute) return false;
+
       const href = el.getAttribute('href');
       if (href && RUTA_SHORTS.test(href)) return true;
+
       for (const a of ['tab-identifier', 'data-mobile-tab-identifier']) {
         const v = el.getAttribute(a);
         if (v && /shorts/i.test(v)) return true;   // FEshorts
       }
+
       const etiqueta = el.getAttribute('aria-label') || el.getAttribute('title') || '';
       if (/^\s*shorts\s*$/i.test(etiqueta)) return true;
+
+      // El botón de la barra de abajo del móvil no es un enlace ni tiene
+      // etiqueta: es <div role="tab" class="pivot-bar-item-tab pivot-shorts">
+      // con la palabra dentro. Por eso no caía con nada de lo de arriba.
+      const clase = typeof el.className === 'string' ? el.className : '';
+      if (CLASE_SHORTS.test(clase)) return true;
+
+      // Último recurso: un elemento de navegación cuyo texto ENTERO es
+      // "Shorts". Se exige texto exacto para no llevarse por delante un vídeo
+      // que hable de shorts en su título.
+      const texto = (el.textContent || '').trim();
+      if (texto.length <= 8 && /^shorts$/i.test(texto)) return true;
     } catch (_) {}
     return false;
   }

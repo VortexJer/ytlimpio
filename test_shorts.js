@@ -153,6 +153,19 @@ const enlaceVideo = (id) => nodo('A', { href: '/watch?v=' + id });
 // enlace y deja solo su identificador interno (FEshorts).
 {
   const casos = [
+    // LAS DOS PRIMERAS SON LAS DE VERDAD, copiadas del DOM de m.youtube.com:
+    // el boton no es un enlace, es un div con clase y texto. Todo lo demas que
+    // yo probaba antes no existia en la pagina.
+    ['REAL: <div role=tab class="pivot-bar-item-tab pivot-shorts">Shorts',
+      nodo('DIV', {
+        attrs: { role: 'tab', class: 'pivot-bar-item-tab pivot-shorts' },
+        className: 'pivot-bar-item-tab pivot-shorts', textContent: 'Shorts',
+      })],
+    ['REAL: la variante de resultados (clase "shorts" a secas)',
+      nodo('DIV', {
+        attrs: { role: 'tab', class: 'pivot-bar-item-tab shorts pivot-bar-fallback-item' },
+        className: 'pivot-bar-item-tab shorts pivot-bar-fallback-item', textContent: 'Shorts',
+      })],
     ['enlace relativo (/shorts)', nodo('A', { href: '/shorts' })],
     ['enlace entero (https://m.youtube.com/shorts)',
       nodo('A', { href: 'https://m.youtube.com/shorts' })],
