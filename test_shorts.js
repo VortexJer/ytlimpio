@@ -14,11 +14,16 @@ function comprobar(desc, ok) {
 
 // ── Mini-DOM ────────────────────────────────────────────────────────────────
 function nodo(tag, props) {
+  props = props || {};
+  const attrs = Object.assign({}, props.attrs);
+  if (props.href !== undefined) attrs.href = props.href;
+
   const el = Object.assign({
-    tagName: tag.toUpperCase(), href: '', hijos: [], parentElement: null,
+    tagName: tag.toUpperCase(), hijos: [], parentElement: null,
     dataset: {}, oculto: false,
     style: { setProperty(k, v) { if (k === 'display' && v === 'none') el.oculto = true; } },
-  }, props || {});
+  }, props);
+  el.getAttribute = (n) => (n in attrs ? String(attrs[n]) : null);
   for (const h of el.hijos) h.parentElement = el;
   el.querySelectorAll = (sel) => descendientes(el).filter(n => casa(n, sel));
   el.closest = (sel) => {
@@ -35,15 +40,38 @@ function descendientes(raiz) {
   return out;
 }
 
+// Buscador de selectores de verdad (lo justo: etiqueta + [attr], [attr="v"],
+// [attr*="v"], [attr^="v"], [attr$="v"], con la "i" de mayúsculas/minúsculas).
+// El de antes miraba trozos de texto del selector y daba por buenas cosas que
+// en un navegador no habrían casado.
+const TROZO = /^([a-z0-9-]*)((?:\[[^\]]*\])*)$/i;
+const ATRIBUTO = /\[([a-z0-9-]+)(?:([*^$]?=)"([^"]*)")?(\s+i)?\]/gi;
+
+function casaSimple(n, sel) {
+  const m = TROZO.exec(sel.trim());
+  if (!m) return false;
+  const [, etiqueta, attrs] = m;
+  if (etiqueta && n.tagName !== etiqueta.toUpperCase()) return false;
+
+  ATRIBUTO.lastIndex = 0;
+  let a;
+  while ((a = ATRIBUTO.exec(attrs || '')) !== null) {
+    const [, nombre, op, valorCrudo, insensible] = a;
+    let v = n.getAttribute(nombre);
+    if (v === null) return false;
+    if (!op) continue;                       // basta con que exista
+    let esperado = valorCrudo;
+    if (insensible) { v = v.toLowerCase(); esperado = esperado.toLowerCase(); }
+    if (op === '=' && v !== esperado) return false;
+    if (op === '*=' && !v.includes(esperado)) return false;
+    if (op === '^=' && !v.startsWith(esperado)) return false;
+    if (op === '$=' && !v.endsWith(esperado)) return false;
+  }
+  return true;
+}
+
 function casa(n, sel) {
-  // Sólo los tipos de selector que usa la función.
-  if (sel.includes('/shorts/')) return n.tagName === 'A' && n.href.includes('/shorts/');
-  if (sel.includes('/watch?v=')) return n.tagName === 'A' && n.href.includes('/watch?v=');
-  if (sel.includes('href="/shorts"')) return n.tagName === 'A' && n.href === '/shorts';
-  return sel.split(',').some(s => {
-    s = s.trim().replace(/\[.*/, '');
-    return s && n.tagName === s.toUpperCase();
-  });
+  return sel.split(',').some(s => s.trim() && casaSimple(n, s));
 }
 
 function montar(raiz) {
@@ -119,15 +147,45 @@ const enlaceVideo = (id) => nodo('A', { href: '/watch?v=' + id });
   comprobar('y la seccion mixta aguanta', seccion.oculto === false);
 }
 
-// ── 5. El botón de Shorts de la barra de abajo ──────────────────────────────
+// ── 5. El botón de Shorts de la barra de abajo, en sus cuatro formas ────────
+// Es el que seguia viendose. No hay una sola forma: segun la version, YouTube
+// pone el enlace relativo, entero, con parametros detras, o ni siquiera pone
+// enlace y deja solo su identificador interno (FEshorts).
 {
-  const enlace = nodo('A', { href: '/shorts' });
-  const boton = nodo('YTM-PIVOT-BAR-ITEM-RENDERER', { hijos: [enlace] });
-  const barra = nodo('YTM-PIVOT-BAR', { hijos: [boton, nodo('YTM-PIVOT-BAR-ITEM-RENDERER', {}) ] });
-  const raiz = nodo('HTML', { hijos: [barra] });
-  montar(raiz)();
-  comprobar('el boton de Shorts de la barra se oculta', boton.oculto === true);
-  comprobar('la barra de navegacion NO se oculta', barra.oculto === false);
+  const casos = [
+    ['enlace relativo (/shorts)', nodo('A', { href: '/shorts' })],
+    ['enlace entero (https://m.youtube.com/shorts)',
+      nodo('A', { href: 'https://m.youtube.com/shorts' })],
+    ['enlace con parametros (/shorts?bp=…)', nodo('A', { href: '/shorts?bp=8gYCGgA%3D' })],
+    ['boton sin enlace, solo con FEshorts',
+      nodo('BUTTON', { attrs: { 'tab-identifier': 'FEshorts' } })],
+    ['boton etiquetado como Shorts',
+      nodo('BUTTON', { attrs: { 'aria-label': 'Shorts' } })],
+  ];
+
+  for (const [desc, dentro] of casos) {
+    const boton = nodo('YTM-PIVOT-BAR-ITEM-RENDERER', { hijos: [dentro] });
+    const inicio = nodo('YTM-PIVOT-BAR-ITEM-RENDERER',
+      { hijos: [nodo('A', { href: '/', attrs: { 'aria-label': 'Inicio' } })] });
+    const barra = nodo('YTM-PIVOT-BAR', { hijos: [inicio, boton] });
+    montar(nodo('HTML', { hijos: [barra] }))();
+    comprobar('se va el boton de Shorts: ' + desc, boton.oculto === true);
+    comprobar('  …y el resto de la barra sigue: ' + desc,
+      barra.oculto === false && inicio.oculto === false);
+  }
+}
+
+// ── 5b. Señuelos: llevan la palabra pero NO son Shorts ──────────────────────
+{
+  const trampa1 = nodo('A', { href: '/watch?v=abc&list=shorts' });
+  const trampa2 = nodo('A', { href: '/results?search_query=shorts' });
+  const trampa3 = nodo('A', { href: '/c/ShortsCentral' });
+  const fila = nodo('DIV', { hijos: [trampa1, trampa2, trampa3] });
+  montar(nodo('HTML', { hijos: [fila] }))();
+  comprobar('un video con "shorts" en un parametro NO se oculta', !trampa1.oculto);
+  comprobar('una busqueda de la palabra "shorts" NO se oculta', !trampa2.oculto);
+  comprobar('un canal llamado ShortsCentral NO se oculta', !trampa3.oculto);
+  comprobar('y la fila que los contiene tampoco', !fila.oculto);
 }
 
 // ── 6. Sin Shorts, no se toca nada ──────────────────────────────────────────

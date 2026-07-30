@@ -131,6 +131,8 @@
     'ytm-rich-item-renderer:has(a[href^="/shorts/"])',
     'ytd-guide-entry-renderer:has(a[title="Shorts"])',
     'ytm-pivot-bar-item-renderer:has([aria-label="Shorts"])',
+    'ytm-pivot-bar-item-renderer:has([tab-identifier="FEshorts"])',
+    'ytm-pivot-bar-item-renderer:has(a[href$="/shorts"])',
   ];
 
   const CSS = `
@@ -194,20 +196,47 @@
       try { elegido.style.setProperty('display', 'none', 'important'); } catch (_) {}
     }
 
-    // El botón de Shorts de la barra de abajo (móvil) y del menú lateral.
-    let botones;
+    // El botón de Shorts: el de la barra de abajo (móvil), el del menú lateral
+    // y el de las pestañas. Antes buscaba un enlace a "/shorts" exacto y por
+    // eso seguía ahí: la dirección puede venir entera (https://…/shorts), con
+    // parámetros detrás, o no haber enlace ninguno y ser un botón que solo
+    // lleva el identificador interno de YouTube. Se miran las tres cosas.
+    let candidatos;
     try {
-      botones = document.querySelectorAll(
-        'a[href="/shorts"], a[href^="/shorts?"], a[title="Shorts"]');
+      candidatos = document.querySelectorAll(
+        'a[href*="shorts" i], [tab-identifier], [data-mobile-tab-identifier], ' +
+        '[aria-label="Shorts"], [title="Shorts"]');
     } catch (_) { return; }
-    for (const b of botones) {
-      if (b.dataset.ytl === '1') continue;
-      b.dataset.ytl = '1';
-      const caja = b.closest(
+
+    for (const c of candidatos) {
+      if (c.dataset.ytl === '1') continue;
+      if (!esDeShorts(c)) continue;
+      c.dataset.ytl = '1';
+      const caja = c.closest(
         'ytm-pivot-bar-item-renderer, ytd-guide-entry-renderer, ' +
-        'ytd-mini-guide-entry-renderer, [role="tab"], li') || b;
+        'ytd-mini-guide-entry-renderer, [role="tab"], li') || c;
       try { caja.style.setProperty('display', 'none', 'important'); } catch (_) {}
     }
+  }
+
+  // ¿Esto lleva a los Shorts? Se mira la RUTA de la dirección, no la dirección
+  // entera: así un vídeo normal que lleve la palabra suelta en algún parámetro
+  // (…/watch?v=x&list=shorts) no se lo lleva por delante.
+  const RUTA_SHORTS = /^(?:https?:\/\/[^/]*)?\/shorts(?:[/?#]|$)/i;
+
+  function esDeShorts(el) {
+    try {
+      if (!el.getAttribute) return false;
+      const href = el.getAttribute('href');
+      if (href && RUTA_SHORTS.test(href)) return true;
+      for (const a of ['tab-identifier', 'data-mobile-tab-identifier']) {
+        const v = el.getAttribute(a);
+        if (v && /shorts/i.test(v)) return true;   // FEshorts
+      }
+      const etiqueta = el.getAttribute('aria-label') || el.getAttribute('title') || '';
+      if (/^\s*shorts\s*$/i.test(etiqueta)) return true;
+    } catch (_) {}
+    return false;
   }
 
   // Un Short abierto directamente se convierte en un vídeo normal: mismo
