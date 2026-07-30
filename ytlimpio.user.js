@@ -20,6 +20,12 @@
 
   const QUITAR_SHORTS = true;
 
+  // Interruptor de la poda de anuncios. Si algún día un vídeo no arranca,
+  // pon esto en false: el script deja los datos del reproductor SIN TOCAR y
+  // solo esconde cosas por CSS. Si con false el vídeo va, el culpable es la
+  // poda; si sigue sin ir, el problema no es de este script.
+  const PODAR_ANUNCIOS = true;
+
   // Aviso de "esto está funcionando": sale abajo unos segundos al abrir
   // YouTube y se va solo. Cuando te canses, ponlo en false.
   const MOSTRAR_ESTADO = true;
@@ -51,6 +57,7 @@
 
   // El primer vídeo llega en una variable global que asigna un script inline.
   try {
+    if (!PODAR_ANUNCIOS) throw 0;
     let guardado = window.ytInitialPlayerResponse;
     Object.defineProperty(window, 'ytInitialPlayerResponse', {
       configurable: true,
@@ -60,44 +67,41 @@
     if (guardado) podar(guardado);
   } catch (_) {}
 
-  // Los siguientes llegan por fetch. En móvil el endpoint es el mismo que en
-  // escritorio: /youtubei/v1/player y /youtubei/v1/get_watch (navegación SPA).
-  // Solo las respuestas del reproductor. /next (comentarios y relacionados) se
-  // deja en paz: no trae anuncios de vídeo, pesa mucho y reescribirla es
-  // pedir problemas.
-  const ENDPOINT =
-    /\/youtubei\/v1\/(player(\?|$)|get_watch(\?|$)|reel\/reel_watch_sequence(\?|$)|reel\/reel_item_watch(\?|$))/;
-  const fetchNativo = window.fetch;
+  // Los siguientes llegan por la red. AQUÍ ESTABA EL FALLO: yo interceptaba
+  // fetch, leía la respuesta del reproductor y devolvía OTRA fabricada a mano.
+  // Una respuesta fabricada nunca es igual que la de verdad —le falta la URL de
+  // origen, el tipo, el estado de redirección— y el reproductor acaba fallando:
+  // primero pantalla en negro, luego "se ha producido un error".
+  //
+  // Así que la respuesta ya no se toca. Se espera a que YouTube la convierta en
+  // datos y se le quitan los anuncios AL OBJETO, en el sitio, un instante antes
+  // de que los use. No se reconstruye nada, no hay cabeceras que cuadrar y no
+  // hay ninguna petición bloqueada.
+  // Filtro barato: si el texto ni siquiera menciona un anuncio, no se recorre
+  // el objeto. Evita pasear por todo lo que YouTube interpreta, que es mucho.
+  const INTERESA = new RegExp(AD_KEYS.join('|'));
 
-  window.fetch = function fetch(entrada) {
-    const p = fetchNativo.apply(this, arguments);
-    let url = '';
+  if (PODAR_ANUNCIOS) {
+    const parseNativo = JSON.parse;
+    JSON.parse = function parse(texto) {
+      const datos = parseNativo.apply(this, arguments);
+      try {
+        if (typeof texto === 'string' && INTERESA.test(texto)) podar(datos);
+      } catch (_) {}
+      return datos;
+    };
+
+    // Y por si lo lee con response.json() en vez de con JSON.parse.
     try {
-      url = typeof entrada === 'string' ? entrada
-          : (entrada instanceof Request ? entrada.url : String(entrada || ''));
-    } catch (_) { return p; }
-    if (!ENDPOINT.test(url)) return p;
-
-    return p.then((resp) => {
-      if (!resp || !resp.ok) return resp;
-      return resp.clone().text().then((texto) => {
-        try {
-          const datos = JSON.parse(texto);
-          if (!podar(datos)) return resp;
-          // Cabeceras NUEVAS, no las del original: las suyas dicen que el
-          // cuerpo viene comprimido y con cierta longitud, y este cuerpo ya
-          // está descomprimido y mide otra cosa. Copiarlas tal cual es
-          // sembrar respuestas ilegibles.
-          const cabeceras = new Headers();
-          cabeceras.set('content-type',
-            resp.headers.get('content-type') || 'application/json; charset=utf-8');
-          return new Response(JSON.stringify(datos), {
-            status: resp.status, statusText: resp.statusText, headers: cabeceras,
-          });
-        } catch (_) { return resp; }
-      }).catch(() => resp);
-    });
-  };
+      const jsonNativo = Response.prototype.json;
+      Response.prototype.json = function json() {
+        return jsonNativo.apply(this, arguments).then((datos) => {
+          try { podar(datos); } catch (_) {}
+          return datos;
+        });
+      };
+    } catch (_) {}
+  }
 
   // ── 2. Shorts fuera ───────────────────────────────────────────────────────
   // En la web móvil los elementos van con prefijo ytm-; en la de escritorio,
